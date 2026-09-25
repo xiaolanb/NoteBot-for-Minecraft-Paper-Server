@@ -1,0 +1,21 @@
+name: Notebot
+version: '1.0.0'
+main: com.notebot.NotebotPlugin
+api-version: '1.21'
+description: 16 个假人分担 16 种音符盒音色，自动演奏 NBS 音乐（类彗星客户端 Notebot）
+author: DSH
+
+commands:
+  notebot:
+    description: Notebot 主命令
+    usage: /notebot <spawn|despawn|play|stop|pause|resume|gui|list|reload>
+    aliases: [nb, musicbot]
+    permission: notebot.use
+
+permissions:
+  notebot.admin:
+    description: Notebot 全部功能
+    default: op
+  notebot.use:
+    description: Notebot 常规功能
+    default: op

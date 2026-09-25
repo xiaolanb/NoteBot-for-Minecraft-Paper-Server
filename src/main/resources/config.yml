@@ -1,0 +1,94 @@
+# ============================================================
+# Notebot 配置文件
+# 16 个假人分担 16 种音符盒音色（每音色 25 个声调 F#3~F#5），
+# 假人真实点击音符盒：转头注视 + 挥臂 + 原版声音与音符粒子。
+# ============================================================
+
+# 聊天消息前缀
+prefix: "§b[Notebot]§r "
+
+bot:
+  # 假人名字前缀，第 i 个假人名为 Notebot01 ~ Notebot16
+  name-prefix: "Notebot"
+  # 假人数量（= 音色数，固定 16 个音色由假人分担）
+  count: 16
+  # 假人游戏模式（CREATIVE 点击距离更远）
+  gamemode: CREATIVE
+  # 假人无敌
+  invulnerable: true
+  # 假人逐个生成的间隔（tick，1 = 每秒 20 个）
+  spawn-interval-ticks: 1
+  # 假人是否受重力（像真实客户端一样摔落）；false = 浮空不动
+  gravity: true
+  # 假人是否可被其他生物推动（实体碰撞）；false = 其他生物无法推动它
+  pushable: true
+  # 假人手的交互距离（格）：原版生存 4.5 / 创造 5.0。调大（如 32）可让一个假人
+  # 点击更远的音符盒；手动模式下还需把 bot.scan-radius 调到同样大，远方的
+  # 音符盒才会被扫描登记。
+  reach: 4.5
+  # 手动模式：扫描玩家自建音符盒的半径（格，3-32）
+  scan-radius: 6
+  # 手动模式扫描方式：AROUND = 周围半径扫描；BELOW = 只检测每个假人脚下方块
+  # （BELOW 模式假人会按网格散开，脚下每个音符盒可承担全部 25 个声调）
+  scan-mode: AROUND
+  # 生成假人/扫描时，自动读取脚底音符盒方块状态的 instrument 值配对担当：
+  # 该音色改派给站在这个音符盒上的假人。只填补“无分配/原担当假人已离线”的音色，
+  # 不会抢在线假人的已有分配（GUI 分配优先，因此一个假人可以担当多个音色）。
+  # 想完全用 GUI 手动分配就设为 false。
+  auto-assign: true
+
+stage:
+  # true = 自动搭建音符盒舞台（16 组 5×5 平台），移除假人时还原地形。
+  # false = 手动模式：不搭建舞台，假人自动扫描身边音符盒（按基座识别音色、
+  #          按方块状态识别声调）并转头点击；扫描不到的音色按 sound-fallback 处理。
+  auto-build: true
+  # 自动舞台：4×4 槽位间距（格，7-16）
+  platform-spacing: 8
+
+playback:
+  # 头部转向包的广播半径（格）
+  sound-radius: 48
+  # 演奏前假人不足时自动补足
+  auto-spawn: true
+  # 循环播放
+  loop: false
+  # 手动模式：演奏期间定期重扫音符盒的间隔（tick，0 = 关闭，100 = 每 5 秒）
+  auto-rescan-ticks: 100
+  # 发声模式：
+  #   AUTO     = 有音符盒就真实点击（原版声音+粒子），没有则按 sound-fallback 模拟发声
+  #   CLICK    = 只真实点击音符盒，没有可用音符盒就跳过
+  #   SIMULATE = 始终模拟发声（在假人位置播放原版音符盒声音+挥臂，不点击方块）
+  sound-mode: AUTO
+  # 无音符盒时的声音回退：在假人位置直接播放原版音符盒声音（无音符粒子）。
+  # 仅 sound-mode: AUTO 时生效。
+  sound-fallback: true
+  # 越界音高（NBS key < 33 或 > 57）：true = 就近取整到 0-24 声调；false = 跳过该音符
+  round-out-of-range: true
+
+gui:
+  title: "§8☰ Notebot 控制台"
+  song-title: "§8♪ 选择曲目"
+
+# ============================================================
+# 假人显示（Tab 列表 / MOTD 玩家列表 / 加入提示）
+# ============================================================
+display:
+  # 假人是否显示在 Tab 玩家列表（true = 显示，false = 隐藏，假人仍在线并正常演奏）
+  tablist: true
+  # 服务器列表(MOTD)里的玩家样本（假人是真实在线玩家，默认会出现在样本里）：
+  #   KEEP      = 不修改（假人以自己的名字显示；与其他插件完全兼容）
+  #   BOTS_ONLY = 只显示假人（清空后填入假人名字）
+  #   HIDDEN    = 不显示假人（只从列表里移除假人，保留真实玩家与其他插件写入的内容）
+  # 兼容 ProxyOnlineLinker 的 Redis 模式：该模式下玩家列表/人数由代理端下发，
+  # 保持 KEEP 并把 motd-count-bots 设为 false 即可（本插件不会覆盖他人写入的内容）。
+  motd: KEEP
+  # MOTD 在线人数是否把假人算进去（false = 从人数里减去在线假人；
+  # 用代理统计人数时建议保持 false，避免人数虚高）
+  motd-count-bots: false
+  # 假人加入/退出提示：
+  #   "AUTO" = 交给服务端与其他插件（如 CustomJoinMessages 会照常格式化假人提示）
+  #   "ON"   = 关闭原版提示，改用 messages.yml 的 bot-join / bot-quit 发送
+  #   "OFF"  = 完全不显示假人的加入/退出提示
+  # 也可写成 true(=ON) / false(=OFF)；注意 YAML 中裸写的 ON/OFF 会被当成布尔值，
+  # 因此推荐使用上面的引号写法。
+  join-quit-message: "AUTO"
