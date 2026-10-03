@@ -1,5 +1,7 @@
 # Notebot
 
+⚠️该插件由深度求索生成
+
 适用于 **Leaf / Paper 1.21.11** 的 Minecraft 插件：
 **16 个假人分担 16 种音符盒音色**（每种音色 25 个声调 F#3~F#5），
 自动演奏 **NBS（Note Block Studio）** 音乐。假人生成方式参照
