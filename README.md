@@ -1,7 +1,5 @@
 # Notebot
 
-⚠️该插件由深度求索生成
-
 适用于 **Leaf / Paper 1.21.11** 的 Minecraft 插件：
 **16 个假人分担 16 种音符盒音色**（每种音色 25 个声调 F#3~F#5），
 自动演奏 **NBS（Note Block Studio）** 音乐。假人生成方式参照
@@ -21,6 +19,8 @@
 - ✅ **显示配置**：Tab 列表显隐、MOTD 玩家样本（兼容 ProxyOnlineLinker Redis 模式）、
   加入/退出提示（兼容 CustomJoinMessages）
 - ✅ **物理可配**：`gravity`（是否摔落）、`pushable`（是否被生物推动）、`reach`（手的交互距离）
+- ✅ **假人皮肤**：把 `.png` 皮肤文件放入 `plugins/Notebot/skins/`，假人即可使用自定义皮肤
+  （通过 Mineskin 换取 textures.minecraft.net 链接，原版客户端直接显示）
 - ✅ 箱子 GUI（音色分配二级菜单、选曲即播、播放控制）
 - ✅ **messages.yml 语言文件**：全部文案可改，支持 `&` 颜色码与 `&#RRGGBB` hex 颜色
 - ✅ NBS v0~v5 解析（26 万音符大曲目实测通过）、keepalive 防踢、越界音高处理
@@ -122,13 +122,42 @@ bot:
   gravity: true
   # 假人是否可被其他生物推动（实体碰撞）；false = 其他生物无法推动它
   pushable: true
+  # 假人权限：true = 有权限（OP）；false = 无权限（普通玩家）
+  op: false
   # 假人手的交互距离（格）：原版生存 4.5 / 创造 5.0。
   # 调大（如 32）可让一个假人点击更远的音符盒；手动模式下还需把
   # bot.scan-radius 调到同样大，远方的音符盒才会被扫描登记。
   reach: 4.5
 ```
 
-三项都支持 `/notebot reload` 后对**在线假人**即时生效。
+这些项都支持 `/notebot reload` 后对**在线假人**即时生效。
+
+## 假人皮肤（`.png` 文件）
+
+把皮肤 `.png` 文件放进 `plugins/Notebot/skins/`：
+
+```yaml
+bot:
+  # 所有假人共用的皮肤文件名；若存在 skins/<假人名>.png（如 Notebot01.png），
+  # 该假人优先使用自己的专属皮肤。留空 = 默认皮肤。
+  skin: "skin.png"
+skins:
+  # 皮肤模型：auto = 自动检测（64×64 右臂外列全透明 → slim/Alex 纤细体型），
+  # classic = 强制 Steve 体型，slim = 强制 Alex 体型。
+  model: "auto"
+  # Mineskin API Key（可选：免费接口有频率限制，配置 Key 后限制大幅提高）
+  mineskin-key: ""
+```
+
+- 皮肤必须是 **64×64（或 64×32）的 PNG**，与官方皮肤格式一致；
+- **支持纤细（Alex）体型皮肤**：`skins.model: auto` 时按原版算法自动检测，
+  检测不准时可用 `classic` / `slim` 强制指定；
+- 插件会把皮肤上传到 **Mineskin** 换取 `textures.minecraft.net` 的官方链接，
+  原版客户端即可直接显示（需要服务器能访问 `api.mineskin.org`）；
+- 上传结果按文件内容+模型哈希缓存在 `skins/cache.yml`，同一文件不会重复上传；
+- 使用流程：放入 .png → `/notebot reload`（日志出现“皮肤已准备: xxx.png”）→
+  `/notebot spawn` 生成假人（日志“假人皮肤已应用: Notebot01”）。
+  已在线假人换皮肤：改文件后 `/notebot reload`，再 despawn + spawn。
 
 ## 显示配置（`display` 段）
 
@@ -174,6 +203,7 @@ bot:
   auto-assign: true             # 按脚底音符盒 instrument 值自动配对担当（不抢在线分配）
   gravity: true                 # 假人是否受重力（摔落）
   pushable: true                # 假人是否可被其他生物推动
+  op: false                     # 假人权限：true = OP，false = 无权限
   reach: 4.5                    # 假人手的交互距离（格）
   scan-radius: 6                # 手动模式扫描半径（格）
   scan-mode: AROUND             # AROUND / BELOW
@@ -217,6 +247,8 @@ display:
 - 仅保证 Leaf/Paper **1.21.11**（NMS 反射按该版本签名逐一验证）；
 - 假人是真实玩家实体：默认无敌，`pushable`/`gravity` 控制其物理行为，
   会触发登录类插件的加入事件；
+- 假人传送走原版 `teleportTo`（不触发 Bukkit 传送事件），因此不受
+  **Multiverse-Core** 等传送/出生点管理插件的影响；
 - NBS 自定义音色（id ≥ 16，依赖资源包声音）自动跳过。
 
 ## 参考项目

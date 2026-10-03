@@ -43,8 +43,10 @@ extends JavaPlugin {
     private FakePlayerManager fakePlayers;
     private PlaybackManager playback;
     private Lang lang;
+    private SkinManager skins;
     private String selectedSong;
     private BukkitTask maintenanceTask;
+    private BukkitTask tickTask;
 
     public void onEnable() {
         this.saveDefaultConfig();
@@ -56,6 +58,7 @@ extends JavaPlugin {
         Nms.init(this);
         this.lang = new Lang(this);
         this.lang.load();
+        this.skins = new SkinManager(this);
         this.stage = new StageManager(this);
         this.fakePlayers = new FakePlayerManager(this);
         this.playback = new PlaybackManager(this);
@@ -68,6 +71,9 @@ extends JavaPlugin {
         this.getServer().getPluginManager().registerEvents((Listener)new GuiListener(), (Plugin)this);
         this.getServer().getPluginManager().registerEvents((Listener)new BotDisplayListener(this), (Plugin)this);
         this.maintenanceTask = this.getServer().getScheduler().runTaskTimer((Plugin)this, () -> this.fakePlayers.maintain(), 20L, 20L);
+        this.tickTask = this.getServer().getScheduler().runTaskTimer((Plugin)this, () -> this.fakePlayers.tickBots(), 1L, 1L);
+        // 皮肤异步预热（上传未缓存的 .png，完成后给在线假人补发玩家信息）
+        this.getServer().getScheduler().runTaskLater((Plugin)this, this.skins::warmUp, 40L);
         this.getLogger().info("Notebot \u5df2\u542f\u7528\u3002");
         this.getLogger().info("\u66f2\u76ee\u76ee\u5f55: " + this.library.dir().getAbsolutePath());
         this.getLogger().info("\u4f7f\u7528 /notebot gui \u914d\u7f6e\u97f3\u8272\u5206\u62c5\u5e76\u64ad\u653e\uff0c\u6216 /notebot play <\u66f2\u76ee>\u3002");
@@ -77,6 +83,10 @@ extends JavaPlugin {
         if (this.maintenanceTask != null) {
             this.maintenanceTask.cancel();
             this.maintenanceTask = null;
+        }
+        if (this.tickTask != null) {
+            this.tickTask.cancel();
+            this.tickTask = null;
         }
         if (this.playback != null) {
             this.playback.stopSilent();
@@ -96,6 +106,9 @@ extends JavaPlugin {
         this.library.reload();
         this.assignments.load();
         this.lang.load();
+        if (this.skins != null) {
+            this.skins.warmUp();
+        }
         if (this.playback != null) {
             this.playback.setLoop(this.config.loop());
         }
@@ -119,6 +132,10 @@ extends JavaPlugin {
 
     public Lang lang() {
         return this.lang;
+    }
+
+    public SkinManager skins() {
+        return this.skins;
     }
 
     public FakePlayerManager fakePlayers() {

@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
@@ -53,7 +54,10 @@ public final class Nms {
     private final Method craftServerGetServer;
     private final Method craftWorldGetHandle;
     private final Method craftPlayerGetHandle;
-    private final Method clientInfoCreateDefault;
+    private final Constructor<?> clientInfoCtor;
+    private final Object chatVisiblityFull;
+    private final Object humanoidArmRight;
+    private final Object particleStatusAll;
     private final Method cookieCreateInitial;
     private final Method playerListPlaceNewPlayer;
     private final Method getPlayerList;
@@ -78,6 +82,21 @@ public final class Nms {
     private final Method stateHolderSetValue;
     private final Method craftBlockDataFromData;
     private final Method playerListBroadcastAll;
+    private final Method entityTeleportTo;
+    private final Method serverPlayerDoTick;
+    private final Method entityGetDeltaMovement;
+    private final Method entitySetDeltaMovement;
+    private final Method entityMove;
+    private final Method entityIsNoGravity;
+    private final Method entitySetOnGround;
+    private final Method entitySetPos;
+    private final Constructor<?> propertyCtor;
+    private final Method playerInfoCreateInitializing;
+    private final Field entityTickCount;
+    private final Field fVecX;
+    private final Field fVecY;
+    private final Field fVecZ;
+    private final Object moverTypeSelf;
     private final Field packetFlowServerbound;
     private final Field connectionChannel;
     private final Field connectionAddress;
@@ -139,7 +158,13 @@ public final class Nms {
         this.blockHitResultCtor = Nms.ctor(Nms.cls("net.minecraft.world.phys.BlockHitResult"), Nms.cls("net.minecraft.world.phys.Vec3"), Nms.cls("net.minecraft.core.Direction"), Nms.cls("net.minecraft.core.BlockPos"), Boolean.TYPE);
         this.craftServerGetServer = Nms.method(Bukkit.getServer().getClass(), "getServer", new Class[0]);
         this.craftWorldGetHandle = Nms.method(((World)Bukkit.getWorlds().get(0)).getClass(), "getHandle", new Class[0]);
-        this.clientInfoCreateDefault = Nms.method(this.cClientInformation, "createDefault", new Class[0]);
+        this.clientInfoCtor = Nms.ctor(this.cClientInformation, String.class, Integer.TYPE,
+                Nms.cls("net.minecraft.world.entity.player.ChatVisiblity"), Boolean.TYPE, Integer.TYPE,
+                Nms.cls("net.minecraft.world.entity.HumanoidArm"), Boolean.TYPE, Boolean.TYPE,
+                Nms.cls("net.minecraft.server.level.ParticleStatus"));
+        this.chatVisiblityFull = Enum.valueOf(Nms.cls("net.minecraft.world.entity.player.ChatVisiblity").asSubclass(Enum.class), "FULL");
+        this.humanoidArmRight = Enum.valueOf(Nms.cls("net.minecraft.world.entity.HumanoidArm").asSubclass(Enum.class), "RIGHT");
+        this.particleStatusAll = Enum.valueOf(Nms.cls("net.minecraft.server.level.ParticleStatus").asSubclass(Enum.class), "ALL");
         this.cookieCreateInitial = Nms.method(this.cCommonListenerCookie, "createInitial", this.cGameProfile, Boolean.TYPE);
         this.playerListPlaceNewPlayer = Nms.method(cPlayerList, "placeNewPlayer", this.cConnection, this.cServerPlayer, this.cCommonListenerCookie);
         this.getPlayerList = Nms.method(cMinecraftServer, "getPlayerList", new Class[0]);
@@ -175,6 +200,29 @@ public final class Nms {
         this.serverPlayerGameModeField = Nms.field(this.cServerPlayer, "gameMode");
         this.playerListBroadcastAll = Nms.method(cPlayerList, "broadcastAll", Nms.cls("net.minecraft.network.protocol.Packet"));
         this.playerInfoRemoveCtor = Nms.ctor(Nms.cls("net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket"), List.class);
+        // 原版直接传送（不触发 Bukkit PlayerTeleportEvent，避免 Multiverse-Core 等插件干扰）
+        this.entityTeleportTo = Nms.method(Nms.cls("net.minecraft.world.entity.Entity"), "teleportTo", cServerLevel, Double.TYPE, Double.TYPE, Double.TYPE, Set.class, Float.TYPE, Float.TYPE, Boolean.TYPE);
+        // 手动补 tick（恢复重力/推挤等物理）与 tick 计数
+        this.serverPlayerDoTick = Nms.method(this.cServerPlayer, "doTick", new Class[0]);
+        this.entityTickCount = Nms.field(Nms.cls("net.minecraft.world.entity.Entity"), "tickCount");
+        Class<?> cEntity2 = Nms.cls("net.minecraft.world.entity.Entity");
+        Class<?> cVec3 = Nms.cls("net.minecraft.world.phys.Vec3");
+        Class<?> cMoverType = Nms.cls("net.minecraft.world.entity.MoverType");
+        this.entityGetDeltaMovement = Nms.method(cEntity2, "getDeltaMovement", new Class[0]);
+        this.entitySetDeltaMovement = Nms.method(cEntity2, "setDeltaMovement", cVec3);
+        this.entityMove = Nms.method(cEntity2, "move", cMoverType, cVec3);
+        this.entityIsNoGravity = Nms.method(cEntity2, "isNoGravity", new Class[0]);
+        this.entitySetOnGround = Nms.method(cEntity2, "setOnGround", Boolean.TYPE);
+        this.entitySetPos = Nms.method(cEntity2, "setPos", Double.TYPE, Double.TYPE, Double.TYPE);
+        Class<?> cProperty = Nms.tryCls("com.mojang.authlib.properties.Property");
+        this.propertyCtor = cProperty != null ? Nms.ctor(cProperty, String.class, String.class, String.class) : null;
+        this.playerInfoCreateInitializing = Nms.method(
+                Nms.cls("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket"),
+                "createPlayerInitializing", Collection.class);
+        this.fVecX = Nms.field(cVec3, "x");
+        this.fVecY = Nms.field(cVec3, "y");
+        this.fVecZ = Nms.field(cVec3, "z");
+        this.moverTypeSelf = Enum.valueOf(cMoverType.asSubclass(Enum.class), "SELF");
         Field allowsListing = null;
         try {
             allowsListing = Nms.field(this.cServerPlayer, "allowsListing");
@@ -226,8 +274,14 @@ public final class Nms {
             return null;
         }
         try {
-            Object profile = this.newGameProfile(uuid, name);
-            Object clientInfo = this.clientInfoCreateDefault.invoke(null, new Object[0]);
+            // 皮肤：缓存命中时在加入 PlayerList 前写入 textures 属性
+            SkinManager.SkinData skin = this.plugin.skins().dataFor(name);
+            Object profile = this.newGameProfile(uuid, name, skin == null ? null : skin.value(), skin == null ? null : skin.signature());
+            // 皮肤第二层（帽子/外套/袖子/裤腿）由 modelCustomisation 位掩码控制，
+            // createDefault() 为 0 会导致其他客户端不渲染任何第二层；
+            // 0x7F = 全部开启（1 披风 + 2 外套 + 4/8 袖子 + 16/32 裤腿 + 64 帽子）。
+            Object clientInfo = this.clientInfoCtor.newInstance("en_us", 8, this.chatVisiblityFull,
+                    true, 0x7F, this.humanoidArmRight, false, true, this.particleStatusAll);
             Object level = this.craftWorldGetHandle.invoke((Object)world, new Object[0]);
             Object serverPlayer = this.serverPlayerCtor.newInstance(this.mcServer, level, profile, clientInfo);
             // 1.21.9+：假人用默认 ClientInformation 时 allowsListing=false，
@@ -244,7 +298,7 @@ public final class Nms {
             this.playerListPlaceNewPlayer.invoke(this.playerList, connection, serverPlayer, cookie);
             Player bukkit = Bukkit.getPlayer((UUID)uuid);
             if (bukkit != null) {
-                bukkit.teleport(new Location(world, x, y, z, yaw, pitch));
+                this.teleportEntity(bukkit, new Location(world, x, y, z, yaw, pitch));
             }
             return bukkit;
         }
@@ -405,6 +459,150 @@ public final class Nms {
         return null;
     }
 
+    /** 用原版 teleportTo 直接传送（不触发 Bukkit PlayerTeleportEvent，避免 Multiverse-Core 等插件干扰） */
+    public boolean teleportEntity(Player player, Location to) {
+        try {
+            Object handle = this.craftPlayerGetHandle.invoke((Object)player, new Object[0]);
+            Object level = this.entityLevel.invoke(handle, new Object[0]);
+            this.entityTeleportTo.invoke(handle, level, to.getX(), to.getY(), to.getZ(), Set.of(), to.getYaw(), to.getPitch(), true);
+            return true;
+        }
+        catch (Throwable t) {
+            this.plugin.getLogger().log(Level.WARNING, "\u5047\u4eba\u4f20\u9001\u5f02\u5e38: " + player.getName(), t);
+            return false;
+        }
+    }
+
+    /**
+     * 手动补 tick：原版没有 tick 这个假人时补一次 doTick；随后每 tick 都手动补
+     * 重力与移动。假人在 Leaf/Paper 1.21.11 下原版 move 不会移动它，这里用 setPos
+     * 直接更新位置（实体追踪器会同步给客户端），摔落与生物推挤因此都可见。
+     *
+     * @param lastTickCount 上一次观察到的实体 tickCount
+     * @return 本次观察后的实体 tickCount；异常返回 -1
+     */
+    public int tickFakePlayer(Player player, int lastTickCount) {
+        try {
+            Object handle = this.craftPlayerGetHandle.invoke((Object)player, new Object[0]);
+            int current = this.entityTickCount.getInt(handle);
+            if (current <= lastTickCount) {
+                this.serverPlayerDoTick.invoke(handle, new Object[0]);
+                current = this.entityTickCount.getInt(handle);
+            }
+            this.simulatePhysics(player, handle);
+            return current;
+        }
+        catch (Throwable t) {
+            this.plugin.getLogger().log(Level.WARNING, "\u5047\u4eba tick \u5f02\u5e38: " + player.getName(), t);
+            return -1;
+        }
+    }
+
+    /** 手动物理：重力 + 落地 + 水平速度（生物推挤）+ 地面摩擦，与 vanilla 量级一致 */
+    private void simulatePhysics(Player player, Object handle) throws Exception {
+        Object velocity = this.entityGetDeltaMovement.invoke(handle, new Object[0]);
+        double vx = (Double)this.fVecX.get(velocity);
+        double vy = (Double)this.fVecY.get(velocity);
+        double vz = (Double)this.fVecZ.get(velocity);
+        boolean noGravity = (Boolean)this.entityIsNoGravity.invoke(handle, new Object[0]);
+        double x = (Double)this.entityGetX.invoke(handle, new Object[0]);
+        double y = (Double)this.entityGetY.invoke(handle, new Object[0]);
+        double z = (Double)this.entityGetZ.invoke(handle, new Object[0]);
+        World world = player.getWorld();
+        // 被其他生物推动：检测紧贴的实体并施加推开速度（假人的碰撞体与原版不一致，手动模拟）
+        if (this.plugin.config().botPushable()) {
+            for (org.bukkit.entity.Entity other : world.getNearbyEntities(
+                    new Location(world, x, y, z), 0.7, 0.9, 0.7)) {
+                if (other == player || other.isDead()) {
+                    continue;
+                }
+                org.bukkit.Location ol = other.getLocation();
+                double dx = x - ol.getX();
+                double dz = z - ol.getZ();
+                double dist = Math.max(0.001, Math.sqrt(dx * dx + dz * dz));
+                double force = 0.02 / dist;
+                vx += dx * force;
+                vz += dz * force;
+            }
+        }
+        if (noGravity) {
+            this.entitySetPos.invoke(handle, x + vx, y + vy, z + vz);
+            return;
+        }
+        double newY = y + vy - 0.005;
+        double newX = x + vx;
+        double newZ = z + vz;
+        int feetY = (int)Math.floor(newY - 1.0E-6);
+        int blockX = (int)Math.floor(newX);
+        int blockZ = (int)Math.floor(newZ);
+        boolean landed = false;
+        for (int by = feetY; by >= feetY - 1 && !landed; --by) {
+            if (world.getBlockAt(blockX, by, blockZ).getType().isSolid()) {
+                newY = by + 1;
+                landed = true;
+            }
+        }
+        double newVx = landed ? vx * 0.6 : vx;
+        double newVy = landed ? 0.0 : vy - 0.005;
+        double newVz = landed ? vz * 0.6 : vz;
+        this.entitySetDeltaMovement.invoke(handle, this.vec3Ctor.newInstance(newVx, newVy, newVz));
+        this.entitySetOnGround.invoke(handle, landed);
+        this.entitySetPos.invoke(handle, newX, newY, newZ);
+    }
+
+    /**
+     * 构造带皮肤 textures 属性的 GameProfile。
+     * authlib 7.x 的 GameProfile.properties 是 record final 字段、PropertyMap
+     * 构造时会复制成 ImmutableMultimap，因此正确做法是：
+     * 1) 把 textures Property 先放入可变 HashMultimap；
+     * 2) 用该 multimap 构造 PropertyMap（复制时保留已有条目）；
+     * 3) 用三参构造器 GameProfile(uuid, name, propertyMap) 构造 profile。
+     * 没有皮肤时走原来的双参构造器。
+     */
+    private Object newGameProfile(UUID uuid, String name, String skinValue, String skinSignature) throws Exception {
+        if (skinValue != null && this.propertyCtor != null && this.cGameProfile != null) {
+            try {
+                Class<?> cHashMultimap = Nms.cls("com.google.common.collect.HashMultimap");
+                Object multimap = cHashMultimap.getMethod("create", new Class[0]).invoke(null, new Object[0]);
+                Method multimapPut = Nms.method(cHashMultimap, "put", Object.class, Object.class);
+                Object property = this.propertyCtor.newInstance("textures", skinValue, skinSignature);
+                multimapPut.invoke(multimap, "textures", property);
+                Class<?> cPropertyMap = Nms.cls("com.mojang.authlib.properties.PropertyMap");
+                Object propertyMap = cPropertyMap.getConstructor(com.google.common.collect.Multimap.class)
+                        .newInstance(multimap);
+                Constructor<?> ctor3 = Nms.ctor(this.cGameProfile, UUID.class, String.class, cPropertyMap);
+                Object profile = ctor3.newInstance(uuid, name, propertyMap);
+                this.plugin.getLogger().info("\u5047\u4eba\u76ae\u80a4\u5df2\u5e94\u7528: " + name);
+                return profile;
+            }
+            catch (Throwable t) {
+                Throwable cause = t instanceof java.lang.reflect.InvocationTargetException && t.getCause() != null
+                        ? t.getCause() : t;
+                this.plugin.getLogger().log(Level.WARNING, "\u5e94\u7528\u5047\u4eba\u76ae\u80a4\u5f02\u5e38\uff0c\u5c06\u4f7f\u7528\u9ed8\u8ba4\u76ae\u80a4: " + name, cause);
+            }
+        }
+        if (this.gameProfileCtor != null) {
+            return this.gameProfileCtor.newInstance(uuid, name);
+        }
+        if (this.craftProfileGetGameProfile != null) {
+            PlayerProfile profile = Bukkit.createPlayerProfile((UUID)uuid, (String)name);
+            return this.craftProfileGetGameProfile.invoke((Object)profile, new Object[0]);
+        }
+        throw new IllegalStateException("\u65e0\u6cd5\u6784\u9020 GameProfile");
+    }
+
+    /** 给所有客户端重发该假人的玩家信息（皮肤异步准备好后让客户端立即显示） */
+    public void resendPlayerInfo(Player player) {
+        try {
+            Object handle = this.craftPlayerGetHandle.invoke((Object)player, new Object[0]);
+            Object packet = this.playerInfoCreateInitializing.invoke(null, java.util.Collections.singletonList(handle));
+            this.playerListBroadcastAll.invoke(this.playerList, packet);
+        }
+        catch (Throwable t) {
+            this.plugin.getLogger().log(Level.WARNING, "\u91cd\u53d1\u5047\u4eba\u73a9\u5bb6\u4fe1\u606f\u5f02\u5e38: " + player.getName(), t);
+        }
+    }
+
     /** 从所有客户端 Tab 列表中隐藏指定 UUID（服务端仍保留这些假人） */
     public void hideFromTablist(Collection<UUID> uuids) {
         if (uuids == null || uuids.isEmpty()) {
@@ -421,17 +619,6 @@ public final class Nms {
         catch (Throwable t) {
             this.plugin.getLogger().log(Level.WARNING, "\u9690\u85cf Tab \u5217\u8868\u5047\u4eba\u5f02\u5e38", t);
         }
-    }
-
-    private Object newGameProfile(UUID uuid, String name) throws Exception {
-        if (this.gameProfileCtor != null) {
-            return this.gameProfileCtor.newInstance(uuid, name);
-        }
-        if (this.craftProfileGetGameProfile != null) {
-            PlayerProfile profile = Bukkit.createPlayerProfile((UUID)uuid, (String)name);
-            return this.craftProfileGetGameProfile.invoke((Object)profile, new Object[0]);
-        }
-        throw new IllegalStateException("\u65e0\u6cd5\u6784\u9020 GameProfile");
     }
 
     private static Class<?> cls(String name) throws ClassNotFoundException {

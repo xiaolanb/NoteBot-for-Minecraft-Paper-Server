@@ -1,5 +1,5 @@
 name: Notebot
-version: '1.0.0'
+version: '1.0.2'
 main: com.notebot.NotebotPlugin
 api-version: '1.21'
 description: 16 个假人分担 16 种音符盒音色，自动演奏 NBS 音乐（类彗星客户端 Notebot）

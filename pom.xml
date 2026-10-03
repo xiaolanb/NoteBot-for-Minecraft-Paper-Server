@@ -6,7 +6,7 @@
 
     <groupId>com.notebot</groupId>
     <artifactId>notebot</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
     <packaging>jar</packaging>
 
     <name>Notebot</name>

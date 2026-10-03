@@ -18,6 +18,7 @@ import com.notebot.bot.FakeBot;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import org.bukkit.scheduler.BukkitTask;
 public final class FakePlayerManager {
     private final NotebotPlugin plugin;
     private final Map<String, FakeBot> bots = new LinkedHashMap<String, FakeBot>();
+    private final Map<String, Integer> tickStates = new HashMap<String, Integer>();
     private BukkitTask spawnTask;
     private boolean spawning;
 
@@ -141,7 +143,7 @@ public final class FakePlayerManager {
                 pos = target.clone();
             }
             if (player == null || !player.isOnline()) continue;
-            player.teleport(pos);
+            this.teleportBot(player, pos);
             bot.resetView();
         }
         this.rescanIfManual();
@@ -167,10 +169,37 @@ public final class FakePlayerManager {
         if (bot == null || bot.player() == null || !bot.player().isOnline() || target == null) {
             return false;
         }
-        bot.player().teleport(target.clone());
+        this.teleportBot(bot.player(), target.clone());
         bot.resetView();
         this.rescanIfManual();
         return true;
+    }
+
+    /**
+     * 传送假人：同世界时用原版 teleportTo（不触发 Bukkit PlayerTeleportEvent，
+     * 避免 Multiverse-Core 等插件干扰）；跨世界回退到 Bukkit 传送。
+     */
+    private void teleportBot(Player player, Location pos) {
+        if (Nms.INSTANCE != null && player.getWorld().equals(pos.getWorld())
+                && Nms.INSTANCE.teleportEntity(player, pos)) {
+            return;
+        }
+        player.teleport(pos);
+    }
+
+    /** 每 tick 手动补 tick（原版没有 tick 假人时），恢复摔落/推挤等物理 */
+    public void tickBots() {
+        for (FakeBot bot : this.bots.values()) {
+            Player player = bot.player();
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            Integer last = this.tickStates.get(bot.name());
+            int now = Nms.INSTANCE.tickFakePlayer(player, last == null ? 0 : last);
+            if (now > 0) {
+                this.tickStates.put(bot.name(), now);
+            }
+        }
     }
 
     public String rescanIfManual() {
@@ -248,6 +277,8 @@ public final class FakePlayerManager {
             player.setCollidable(this.plugin.config().botPushable());
             player.setGravity(this.plugin.config().botGravity());
             player.setInvulnerable(this.plugin.config().invulnerable());
+            player.setGameMode(this.plugin.config().gamemode());
+            player.setOp(this.plugin.config().botOp());
             this.applyReach(player);
             this.bots.put(name, new FakeBot(name, index, player));
             if (!this.plugin.config().tablistShow()) {
@@ -291,9 +322,10 @@ public final class FakePlayerManager {
                 continue;
             }
             Nms.INSTANCE.maintainConnection(player);
-            // 配置热更新：重力/推挤与手的交互距离（/notebot reload 后对在线假人生效）
+            // 配置热更新：重力/推挤/权限/手的交互距离（/notebot reload 后对在线假人生效）
             player.setCollidable(this.plugin.config().botPushable());
             player.setGravity(this.plugin.config().botGravity());
+            player.setOp(this.plugin.config().botOp());
             this.applyReach(player);
         }
     }

@@ -74,6 +74,39 @@ public final class Config {
         return this.c().getBoolean("bot.pushable", true);
     }
 
+    /** 假人权限：true = 有权限（OP）；false = 无权限（普通玩家） */
+    public boolean botOp() {
+        return this.c().getBoolean("bot.op", false);
+    }
+
+    /** 假人皮肤：plugins/Notebot/skins/ 下的 .png 文件名（留空 = 默认皮肤） */
+    public String botSkin() {
+        String skin = this.c().getString("bot.skin", "");
+        return skin == null ? "" : skin.trim();
+    }
+
+    /** Mineskin API Key（可选，提高皮肤上传频率限制） */
+    public String mineskinKey() {
+        String key = this.c().getString("skins.mineskin-key", "");
+        return key == null ? "" : key.trim();
+    }
+
+    /**
+     * 皮肤模型：auto = 自动检测（64x64 右臂外列透明视为 slim），
+     * classic = 强制经典（Steve），slim = 强制纤细（Alex）。
+     */
+    public String skinModel() {
+        String model = this.c().getString("skins.model", "auto");
+        if (model == null) {
+            return "auto";
+        }
+        model = model.trim().toLowerCase(Locale.ROOT);
+        if (model.equals("classic") || model.equals("slim")) {
+            return model;
+        }
+        return "auto";
+    }
+
     /** 假人手的交互距离（格）：原版生存 4.5 / 创造 5.0；调大可点更远的音符盒 */
     public double botReach() {
         return Math.max(3.0, Math.min(64.0, this.c().getDouble("bot.reach", 4.5)));
